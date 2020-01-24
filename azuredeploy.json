@@ -2,9 +2,8 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "vmResourceGroupName": {
-      "type": "string",
-      "defaultValue": "[concat(resourceGroup().name, '-vms')]"
+    "sandboxGroupObjectId": {
+      "type": "string"
     },
     "baseName": {
       "type": "string",
@@ -18,6 +17,10 @@
       "type": "string",
       "defaultValue": "\"Standard_DS2_v2\", \"Standard_D2as_v4\""
     },
+    "sasExpiryDate": {
+      "type": "string",
+      "defaultValue": "2021-01-01T00:00:00Z"
+    },
     "startupTime": {
       "type": "string",
       "defaultValue": "0700"
@@ -30,9 +33,15 @@
       "type": "string",
       "defaultValue": "Pacific Standard Time"
     },
-    "storageContainerName": {
-      "type": "string",
-      "defaultValue": "source"
+    "transferIpRanges": {
+      "type": "array",
+      "defaultValue": [
+        {
+          "name": "default",
+          "cidr": "10.0.0.0/0",
+          "ipRange": "10.0.0.0"
+        }
+      ]
     },
     "vmUsername": {
       "type": "string",
@@ -49,29 +58,74 @@
   },
   "variables": {
     "prefix": "[toLower(concat(parameters('baseName'), take(uniqueString(resourceGroup().id), 6)))]",
+    "blobDataContributorRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
     "blobDataReaderRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')]",
+    "copy": [
+      {
+        "name": "transferDataContainerWriterSASProperties",
+        "count": "[length(parameters('transferIpRanges'))]",
+        "input": {
+          "name": "[parameters('transferIpRanges')[copyIndex('transferDataContainerWriterSASProperties')].name]",
+          "canonicalizedResource": "[concat('/blob/', variables('transferStorageName'), '/', variables('transferDataContainerName'))]",
+          "signedExpiry": "[parameters('sasExpiryDate')]",
+          "signedIp": "[parameters('transferIpRanges')[copyIndex('transferDataContainerWriterSASProperties')].ipRange]",
+          "signedResource": "c",
+          "signedPermission": "acwdl",
+          "signedProtocol": "https"
+        }
+      }
+    ],
+    "devTestLabsUserRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '76283e04-6283-4c54-8f91-bcf1374a3c64')]",
     "readerRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
-    "dnsZoneName": "privatelink.blob.core.windows.net",
-    "storageSASProperties": {
-      "signedServices": "b",
-      "signedPermission": "rl",
-      "signedExpiry": "2021-01-01T00:00:00Z",
-      "signedResourceTypes": "sco"
-    },
+    "dnsZoneName": "privatelink.windows.net",
     "bastionName": "[concat(variables('prefix'), '-bastion')]",
+    "bastionNsgName": "[concat(variables('prefix'), '-bastion-nsg')]",
+    "bastionPublicIPName": "[concat(variables('prefix'), '-bastion-ip')]",
     "dnsName": "[variables('prefix')]",
     "identityName": "[concat(variables('prefix'), '-identity')]",
     "labName": "[concat(variables('prefix'), '-lab')]",
-    "bastionNsgName": "[concat(variables('prefix'), '-bastion-nsg')]",
-    "vmNsgName": "[concat(variables('prefix'), '-vm-nsg')]",
-    "publicIPName": "[concat(variables('prefix'), '-ip')]",
-    "storageDnsName": "[variables('storageName')]",
-    "storageName": "[concat(variables('prefix'), 'data')]",
-    "storagePrivateEndpointName": "[concat(variables('prefix'), '-blob-endpoint')]",
-    "subnetName": "default",
+    "privateDataContainerName": "private",
+    "privateDataContainerSASProperties": {
+      "canonicalizedResource": "[concat('/blob/', variables('privateStorageName'), '/', variables('privateDataContainerName'))]",
+      "signedExpiry": "[parameters('sasExpiryDate')]",
+      "signedIp": "[variables('vmSubnetAddressRange')]",
+      "signedResource": "c",
+      "signedPermission": "rl",
+      "signedProtocol": "https"
+    },
+    "privateStorageDnsName": "[variables('privateStorageName')]",
+    "privateStorageName": "[concat(variables('prefix'), 'private')]",
+    "privateStorageEndpointName": "[concat(variables('prefix'), '-blob-private')]",
+    "transferDataContainerName": "transfer",
+    "transferDataContainerReaderSASProperties": {
+      "canonicalizedResource": "[concat('/blob/', variables('transferStorageName'), '/', variables('transferDataContainerName'))]",
+      "signedExpiry": "[parameters('sasExpiryDate')]",
+      "signedIp": "[variables('vmSubnetAddressRange')]",
+      "signedResource": "c",
+      "signedPermission": "rdl",
+      "signedProtocol": "https"
+    },
+    "transferStorageDnsName": "[variables('transferStorageName')]",
+    "transferStorageName": "[concat(variables('prefix'), 'transfer')]",
+    "transferStorageEndpointName": "[concat(variables('prefix'), '-blob-transfer')]",
+    "vaultDnsName": "[variables('vaultName')]",
+    "vaultEndpointName": "[concat(variables('prefix'), '-vault')]",
     "vaultName": "[concat(variables('prefix'), '-vault')]",
     "virtualNetworkLinkName": "[concat(variables('prefix'), 'privatedns')]",
-    "vnetName": "[concat(variables('prefix'), '-vnet')]"
+    "vmNsgName": "[concat(variables('prefix'), '-vm-nsg')]",
+    "vmResourceGroupName": "[concat(resourceGroup().name, '-vms')]",
+    "vmSubnetName": "default",
+    "vmSubnetAddressRange": "10.0.0.0-10.0.0.255",
+    "vnetName": "[concat(variables('prefix'), '-vnet')]",
+    "workingDataContainerName": "work",
+    "workingDataContainerSASProperties": {
+      "canonicalizedResource": "[concat('/blob/', variables('privateStorageName'), '/', variables('workingDataContainerName'))]",
+      "signedIp": "[variables('vmSubnetAddressRange')]",
+      "signedExpiry": "[parameters('sasExpiryDate')]",
+      "signedResource": "c",
+      "signedPermission": "racwdl",
+      "signedProtocol": "https"
+    }
   },
   "resources": [
     {
@@ -84,7 +138,7 @@
       "type": "Microsoft.Network/publicIPAddresses",
       "apiVersion": "2019-09-01",
       "location": "[resourceGroup().location]",
-      "name": "[variables('publicIPName')]",
+      "name": "[variables('bastionPublicIPName')]",
       "sku": {
         "name": "Standard"
       },
@@ -138,19 +192,6 @@
               "sourceAddressPrefix": "*",
               "sourcePortRange": "*",
               "destinationAddressPrefix": "AzureResourceManager",
-              "destinationPortRange": "*"
-            }
-          },
-          {
-            "name": "keyvault-outbound-allow",
-            "properties": {
-              "priority": 120,
-              "direction": "Outbound",
-              "access": "Allow",
-              "protocol": "*",
-              "sourceAddressPrefix": "*",
-              "sourcePortRange": "*",
-              "destinationAddressPrefix": "AzureKeyVault",
               "destinationPortRange": "*"
             }
           }
@@ -302,7 +343,7 @@
         },
         "subnets": [
           {
-            "name": "[variables('subnetName')]",
+            "name": "[variables('vmSubnetName')]",
             "properties": {
               "addressPrefix": "10.0.0.0/24",
               "privateEndpointNetworkPolicies": "Disabled",
@@ -312,6 +353,9 @@
               "serviceEndpoints": [
                 {
                   "service": "Microsoft.Storage"
+                },
+                {
+                  "service": "Microsoft.KeyVault"
                 }
               ]
             }
@@ -335,7 +379,7 @@
       "type": "Microsoft.Storage/storageAccounts",
       "apiVersion": "2019-06-01",
       "location": "[resourceGroup().location]",
-      "name": "[variables('storageName')]",
+      "name": "[variables('privateStorageName')]",
       "kind": "StorageV2",
       "sku": {
         "name": "Standard_LRS"
@@ -353,13 +397,13 @@
             }
           }
         },
-        "isHnsEnabled": true,
+        "isHnsEnabled": false,
         "networkAcls": {
           "bypass": "None",
           "defaultAction": "Deny",
           "virtualNetworkRules": [
             {
-              "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]",
+              "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('vmSubnetName'))]",
               "action": "Allow"
             }
           ]
@@ -369,51 +413,232 @@
       "resources": [
         {
           "dependsOn": [
-            "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+            "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))]"
+          ],
+          "type": "providers/roleAssignments",
+          "apiVersion": "2018-09-01-preview",
+          "name": "[concat('Microsoft.Authorization/', guid(concat(resourceGroup().id, variables('privateStorageName'), variables('identityName'), 'Reader')))]",
+          "properties": {
+            "roleDefinitionId": "[variables('readerRoleId')]",
+            "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))).principalId]",
+            "principalType": "ServicePrincipal"
+          }
+        },
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))]"
+          ],
+          "type": "providers/roleAssignments",
+          "apiVersion": "2018-09-01-preview",
+          "name": "[concat('Microsoft.Authorization/', guid(concat(resourceGroup().id, variables('privateStorageName'), parameters('sandboxGroupObjectId'), 'Reader')))]",
+          "properties": {
+            "roleDefinitionId": "[variables('readerRoleId')]",
+            "principalId": "[parameters('sandboxGroupObjectId')]"
+          }
+        },
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))]"
           ],
           "type": "blobServices/containers",
           "apiVersion": "2019-06-01",
-          "name": "[concat('default/', parameters('storageContainerName'))]",
+          "name": "[concat('default/', variables('privateDataContainerName'))]",
           "properties": {
             "publicAccess": "None"
+          },
+          "resources": [
+            {
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('privateStorageName'), 'default', variables('privateDataContainerName'))]"
+              ],
+              "type": "providers/roleAssignments",
+              "apiVersion": "2018-09-01-preview",
+              "name": "[concat('Microsoft.Authorization/', guid(resourceGroup().id, variables('privateStorageName'), variables('privateDataContainerName'), variables('identityName'), 'StorageBlobDataReader'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('blobDataReaderRoleId')]",
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))).principalId]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('privateStorageName'), 'default', variables('privateDataContainerName'))]"
+              ],
+              "type": "providers/roleAssignments",
+              "apiVersion": "2018-09-01-preview",
+              "name": "[concat('Microsoft.Authorization/', guid(resourceGroup().id, variables('privateStorageName'), variables('privateDataContainerName'), parameters('sandboxGroupObjectId'), 'StorageBlobDataReader'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('blobDataReaderRoleId')]",
+                "principalId": "[parameters('sandboxGroupObjectId')]"
+              }
+            }
+          ]
+        },
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))]"
+          ],
+          "type": "blobServices/containers",
+          "apiVersion": "2019-06-01",
+          "name": "[concat('default/', variables('workingDataContainerName'))]",
+          "properties": {
+            "publicAccess": "None"
+          },
+          "resources": [
+            {
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('privateStorageName'), 'default', variables('workingDataContainerName'))]"
+              ],
+              "type": "providers/roleAssignments",
+              "apiVersion": "2018-09-01-preview",
+              "name": "[concat('Microsoft.Authorization/', guid(resourceGroup().id, variables('privateStorageName'), variables('workingDataContainerName'), variables('identityName'), 'StorageBlobDataContributor'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('blobDataContributorRoleId')]",
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))).principalId]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('privateStorageName'), 'default', variables('workingDataContainerName'))]"
+              ],
+              "type": "providers/roleAssignments",
+              "apiVersion": "2018-09-01-preview",
+              "name": "[concat('Microsoft.Authorization/', guid(resourceGroup().id, variables('privateStorageName'), variables('workingDataContainerName'), parameters('sandboxGroupObjectId'), 'StorageBlobDataContributor'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('blobDataContributorRoleId')]",
+                "principalId": "[parameters('sandboxGroupObjectId')]"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ],
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2019-06-01",
+      "location": "[resourceGroup().location]",
+      "name": "[variables('transferStorageName')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "properties": {
+        "accessTier": "Hot",
+        "encryption": {
+          "keySource": "Microsoft.Storage",
+          "services": {
+            "blob": {
+              "enabled": true
+            },
+            "file": {
+              "enabled": true
+            }
           }
+        },
+        "networkAcls": {
+          "bypass": "None",
+          "defaultAction": "Deny",
+          "virtualNetworkRules": [
+            {
+              "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('vmSubnetName'))]",
+              "action": "Allow"
+            }
+          ],
+          "copy": [
+            {
+              "name": "ipRules",
+              "count": "[length(parameters('transferIpRanges'))]",
+              "input": {
+                "action": "Allow",
+                "value": "[parameters('transferIpRanges')[copyIndex('ipRules')].cidr]"
+              }
+            }
+          ]
+        },
+        "isHnsEnabled": false,
+        "supportsHttpsTrafficOnly": true
+      },
+      "resources": [
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))]"
+          ],
+          "type": "providers/roleAssignments",
+          "apiVersion": "2018-09-01-preview",
+          "name": "[concat('Microsoft.Authorization/', guid(concat(resourceGroup().id, variables('transferStorageName'), 'Reader')))]",
+          "properties": {
+            "roleDefinitionId": "[variables('readerRoleId')]",
+            "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))).principalId]",
+            "principalType": "ServicePrincipal"
+          }
+        },
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))]"
+          ],
+          "type": "providers/roleAssignments",
+          "apiVersion": "2018-09-01-preview",
+          "name": "[concat('Microsoft.Authorization/', guid(concat(resourceGroup().id, parameters('sandboxGroupObjectId'), 'Reader')))]",
+          "properties": {
+            "roleDefinitionId": "[variables('readerRoleId')]",
+            "principalId": "[parameters('sandboxGroupObjectId')]"
+          }
+        },
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))]"
+          ],
+          "type": "blobServices/containers",
+          "apiVersion": "2019-06-01",
+          "name": "[concat('default/', variables('transferDataContainerName'))]",
+          "properties": {
+            "publicAccess": "None"
+          },
+          "resources": [
+            {
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('transferStorageName'), 'default', variables('transferDataContainerName'))]"
+              ],
+              "type": "providers/roleAssignments",
+              "apiVersion": "2018-09-01-preview",
+              "name": "[concat('Microsoft.Authorization/', guid(resourceGroup().id, variables('privateStorageName'), variables('transferDataContainerName'), variables('identityName'), 'StorageBlobDataReader'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('blobDataReaderRoleId')]",
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))).principalId]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('transferStorageName'), 'default', variables('transferDataContainerName'))]"
+              ],
+              "type": "providers/roleAssignments",
+              "apiVersion": "2018-09-01-preview",
+              "name": "[concat('Microsoft.Authorization/', guid(resourceGroup().id, variables('privateStorageName'), variables('transferDataContainerName'), parameters('sandboxGroupObjectId'), 'StorageBlobDataReader'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('blobDataReaderRoleId')]",
+                "principalId": "[parameters('sandboxGroupObjectId')]"
+              }
+            }
+          ]
         }
       ]
     },
     {
       "dependsOn": [
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
-      ],
-      "type": "Microsoft.Storage/storageAccounts/providers/roleAssignments",
-      "apiVersion": "2018-09-01-preview",
-      "name": "[concat(variables('storageName'), '/Microsoft.Authorization/', guid(concat(resourceGroup().id, variables('storageName'), 'Reader')))]",
-      "properties": {
-        "roleDefinitionId": "[variables('readerRoleId')]",
-        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))).principalId]",
-        "principalType": "ServicePrincipal"
-      }
-    },
-    {
-      "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
-      ],
-      "type": "Microsoft.Storage/storageAccounts/blobServices/containers/providers/roleAssignments",
-      "apiVersion": "2018-09-01-preview",
-      "name": "[concat(variables('storageName'), '/default/', parameters('storageContainerName'), '/Microsoft.Authorization/', guid(resourceGroup().id, variables('storageName'), parameters('storageContainerName'), 'StorageBlobDataReader'))]",
-      "properties": {
-        "roleDefinitionId": "[variables('blobDataReaderRoleId')]",
-        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))).principalId]",
-        "principalType": "ServicePrincipal"
-      }
-    },
-    {
-      "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]"
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
       ],
       "type": "Microsoft.KeyVault/vaults",
-      "apiVersion": "2016-10-01",
+      "apiVersion": "2018-02-14",
       "location": "[resourceGroup().location]",
       "name": "[variables('vaultName')]",
       "properties": {
@@ -432,52 +657,169 @@
                 "list"
               ]
             }
+          },
+          {
+            "tenantId": "[subscription().tenantId]",
+            "objectId": "[parameters('sandboxGroupObjectId')]",
+            "permissions": {
+              "secrets": [
+                "get",
+                "list"
+              ]
+            }
           }
-        ]
-      }
+        ],
+        "networkAcls": {
+          "bypass": "AzureServices",
+          "defaultAction": "Deny",
+          "virtualNetworkRules": [
+            {
+              "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('vmSubnetName'))]",
+              "action": "Allow"
+            }
+          ]
+        }
+      },
+      "resources": [
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.KeyVault/vaults', variables('vaultName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))]"
+          ],
+          "type": "secrets",
+          "apiVersion": "2016-10-01",
+          "location": "[resourceGroup().location]",
+          "name": "privateStorage",
+          "properties": {
+            "value": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))).primaryEndpoints.blob, '?', listServiceSas(resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName')), '2019-06-01', variables('privateDataContainerSASProperties')).serviceSasToken)]"
+          }
+        },
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.KeyVault/vaults', variables('vaultName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))]"
+          ],
+          "type": "secrets",
+          "apiVersion": "2016-10-01",
+          "location": "[resourceGroup().location]",
+          "name": "transferStorageReader",
+          "properties": {
+            "value": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))).primaryEndpoints.blob, '?', listServiceSas(resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName')), '2019-06-01', variables('transferDataContainerReaderSASProperties')).serviceSasToken)]"
+          }
+        },
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.KeyVault/vaults', variables('vaultName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))]"
+          ],
+          "type": "secrets",
+          "apiVersion": "2016-10-01",
+          "location": "[resourceGroup().location]",
+          "name": "workingStorage",
+          "properties": {
+            "value": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))).primaryEndpoints.blob, '?', listServiceSas(resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName')), '2019-06-01', variables('workingDataContainerSASProperties')).serviceSasToken)]"
+          }
+        }
+      ]
     },
     {
       "dependsOn": [
         "[resourceId('Microsoft.KeyVault/vaults', variables('vaultName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))]"
       ],
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
       "location": "[resourceGroup().location]",
-      "name": "[concat(variables('vaultName'), '/storageConnString')]",
+      "name": "[concat(variables('vaultName'), '/transferStorageWriter-', variables('transferDataContainerWriterSASProperties')[copyIndex()].name)]",
+      "copy": {
+        "name": "transferStorageWriter",
+        "count": "[length(variables('transferDataContainerWriterSASProperties'))]"
+      },
       "properties": {
-        "value": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))).primaryEndpoints.blob, '?', listAccountSas(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), '2019-06-01', variables('storageSASProperties')).accountSasToken)]"
+        "value": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))).primaryEndpoints.blob, '?', listServiceSas(resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName')), '2019-06-01', variables('transferDataContainerWriterSASProperties')[copyIndex()]).serviceSasToken)]"
       }
     },
     {
       "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))]",
         "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
       ],
       "type": "Microsoft.Network/privateEndpoints",
       "apiVersion": "2019-09-01",
       "location": "[resourceGroup().location]",
-      "name": "[variables('storagePrivateEndpointName')]",
+      "name": "[variables('privateStorageEndpointName')]",
       "properties": {
         "privateLinkServiceConnections": [
           {
-            "name": "[variables('storagePrivateEndpointName')]",
+            "name": "[variables('privateStorageEndpointName')]",
             "properties": {
               "groupIds": [
                 "blob"
               ],
-              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))]"
             }
           }
         ],
         "subnet": {
-          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]"
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('vmSubnetName'))]"
         }
       }
     },
     {
       "dependsOn": [
-        "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults', variables('vaultName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ],
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2019-09-01",
+      "location": "[resourceGroup().location]",
+      "name": "[variables('vaultEndpointName')]",
+      "properties": {
+        "privateLinkServiceConnections": [
+          {
+            "name": "[variables('vaultEndpointName')]",
+            "properties": {
+              "groupIds": [
+                "vault"
+              ],
+              "privateLinkServiceId": "[resourceId('Microsoft.KeyVault/vaults', variables('vaultName'))]"
+            }
+          }
+        ],
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('vmSubnetName'))]"
+        }
+      }
+    },
+    {
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ],
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2019-09-01",
+      "location": "[resourceGroup().location]",
+      "name": "[variables('transferStorageEndpointName')]",
+      "properties": {
+        "privateLinkServiceConnections": [
+          {
+            "name": "[variables('transferStorageEndpointName')]",
+            "properties": {
+              "groupIds": [
+                "blob"
+              ],
+              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))]"
+            }
+          }
+        ],
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('vmSubnetName'))]"
+        }
+      }
+    },
+    {
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('bastionPublicIPName'))]",
         "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
       ],
       "type": "Microsoft.Network/bastionHosts",
@@ -490,7 +832,7 @@
             "name": "ipconfig1",
             "properties": {
               "publicIPAddress": {
-                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPName'))]"
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('bastionPublicIPName'))]"
               },
               "subnet": {
                 "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), 'AzureBastionSubnet')]"
@@ -498,7 +840,21 @@
             }
           }
         ]
-      }
+      },
+      "resources": [
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.Network/bastionHosts', variables('bastionName'))]"
+          ],
+          "type": "providers/roleAssignments",
+          "apiVersion": "2018-09-01-preview",
+          "name": "[concat('Microsoft.Authorization/', guid(concat(resourceGroup().id, variables('bastionName'), 'Reader')))]",
+          "properties": {
+            "roleDefinitionId": "[variables('readerRoleId')]",
+            "principalId": "[parameters('sandboxGroupObjectId')]"
+          }
+        }
+      ]
     },
     {
       "type": "Microsoft.DevTestLab/labs",
@@ -509,7 +865,7 @@
         "browserConnect": "Enabled",
         "environmentPermission": "Reader",
         "labStorageType": "Premium",
-        "vmCreationResourceGroupId": "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('vmResourceGroupName'))]"
+        "vmCreationResourceGroupId": "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('vmResourceGroupName'))]"
       },
       "resources": [
         {
@@ -727,18 +1083,30 @@
             "allowedSubnets": [
               {
                 "allowPublicIp": "Deny",
-                "labSubnetName": "[variables('subnetName')]",
-                "resourceId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]"
+                "labvmSubnetName": "[variables('vmSubnetName')]",
+                "resourceId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('vmSubnetName'))]"
               }
             ],
             "externalProviderResourceId": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
             "subnetOverrides": [
               {
-                "name": "[variables('subnetName')]",
-                "resourceId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]",
+                "name": "[variables('vmSubnetName')]",
+                "resourceId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('vmSubnetName'))]",
                 "useInVmCreationPermission": "Allow"
               }
             ]
+          }
+        },
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.DevTestLab/labs', variables('labName'))]"
+          ],
+          "type": "providers/roleAssignments",
+          "apiVersion": "2018-09-01-preview",
+          "name": "[concat('Microsoft.Authorization/', guid(concat(resourceGroup().id, variables('labName'), 'DevTestLabsUser')))]",
+          "properties": {
+            "roleDefinitionId": "[variables('devTestLabsUserRoleId')]",
+            "principalId": "[parameters('sandboxGroupObjectId')]"
           }
         }
       ]
@@ -746,11 +1114,11 @@
     {
       "dependsOn": [
         "[resourceId('Microsoft.Network/privateDnsZones', variables('dnsZoneName'))]",
-        "[resourceId('Microsoft.Network/privateEndpoints', variables('storagePrivateEndpointName'))]"
+        "[resourceId('Microsoft.Network/privateEndpoints', variables('privateStorageEndpointName'))]"
       ],
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2017-05-10",
-      "name": "blob-private-dns",
+      "name": "private-blob-private-dns",
       "resourceGroup": "[resourceGroup().name]",
       "properties": {
         "mode": "Incremental",
@@ -761,11 +1129,11 @@
           "dnsZoneName": {
             "value": "[variables('dnsZoneName')]"
           },
-          "privateEndpointNicId": {
-            "value": "[reference(resourceId('Microsoft.Network/privateEndpoints', variables('storagePrivateEndpointName'))).networkInterfaces[0].id]"
+          "endpointNicId": {
+            "value": "[reference(resourceId('Microsoft.Network/privateEndpoints', variables('privateStorageEndpointName'))).networkInterfaces[0].id]"
           },
-          "storageDnsName": {
-            "value": "[variables('storageDnsName')]"
+          "dnsName": {
+            "value": "[variables('privateStorageDnsName')]"
           }
         },
         "template": {
@@ -775,10 +1143,10 @@
             "dnsZoneName": {
               "type": "string"
             },
-            "privateEndpointNicId": {
+            "endpointNicId": {
               "type": "string"
             },
-            "storageDnsName": {
+            "dnsName": {
               "type": "string"
             }
           },
@@ -786,14 +1154,171 @@
             {
               "type": "Microsoft.Network/privateDnsZones/A",
               "apiVersion": "2018-09-01",
-              "name": "[concat(parameters('dnsZoneName'), '/', parameters('storageDnsName'))]",
+              "name": "[concat(parameters('dnsZoneName'), '/', parameters('dnsName'))]",
               "properties": {
                 "ttl": 3600,
                 "aRecords": [
                   {
-                    "ipv4Address": "[reference(parameters('privateEndpointNicId'), '2019-09-01').ipConfigurations[0].properties.privateIPAddress]"
+                    "ipv4Address": "[reference(parameters('endpointNicId'), '2019-09-01').ipConfigurations[0].properties.privateIPAddress]"
                   }
                 ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', variables('dnsZoneName'))]",
+        "[resourceId('Microsoft.Network/privateEndpoints', variables('transferStorageEndpointName'))]"
+      ],
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2017-05-10",
+      "name": "transfer-blob-private-dns",
+      "resourceGroup": "[resourceGroup().name]",
+      "properties": {
+        "mode": "Incremental",
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "parameters": {
+          "dnsZoneName": {
+            "value": "[variables('dnsZoneName')]"
+          },
+          "endpointNicId": {
+            "value": "[reference(resourceId('Microsoft.Network/privateEndpoints', variables('transferStorageEndpointName'))).networkInterfaces[0].id]"
+          },
+          "dnsName": {
+            "value": "[variables('transferStorageDnsName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "dnsZoneName": {
+              "type": "string"
+            },
+            "endpointNicId": {
+              "type": "string"
+            },
+            "dnsName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/privateDnsZones/A",
+              "apiVersion": "2018-09-01",
+              "name": "[concat(parameters('dnsZoneName'), '/', parameters('dnsName'))]",
+              "properties": {
+                "ttl": 3600,
+                "aRecords": [
+                  {
+                    "ipv4Address": "[reference(parameters('endpointNicId'), '2019-09-01').ipConfigurations[0].properties.privateIPAddress]"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', variables('dnsZoneName'))]",
+        "[resourceId('Microsoft.Network/privateEndpoints', variables('vaultEndpointName'))]"
+      ],
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2017-05-10",
+      "name": "vault-private-dns",
+      "resourceGroup": "[resourceGroup().name]",
+      "properties": {
+        "mode": "Incremental",
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "parameters": {
+          "dnsZoneName": {
+            "value": "[variables('dnsZoneName')]"
+          },
+          "endpointNicId": {
+            "value": "[reference(resourceId('Microsoft.Network/privateEndpoints', variables('vaultEndpointName'))).networkInterfaces[0].id]"
+          },
+          "dnsName": {
+            "value": "[variables('vaultDnsName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "dnsZoneName": {
+              "type": "string"
+            },
+            "endpointNicId": {
+              "type": "string"
+            },
+            "dnsName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/privateDnsZones/A",
+              "apiVersion": "2018-09-01",
+              "name": "[concat(parameters('dnsZoneName'), '/', parameters('dnsName'))]",
+              "properties": {
+                "ttl": 3600,
+                "aRecords": [
+                  {
+                    "ipv4Address": "[reference(parameters('endpointNicId'), '2019-09-01').ipConfigurations[0].properties.privateIPAddress]"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dependsOn": [
+        "[resourceId('Microsoft.DevTestLab/labs', variables('labName'))]"
+      ],
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2017-05-10",
+      "name": "sandbox-vm-permissions",
+      "resourceGroup": "[variables('vmResourceGroupName')]",
+      "properties": {
+        "mode": "Incremental",
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "parameters": {
+          "objectId": {
+            "value": "[parameters('sandboxGroupObjectId')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "objectId": {
+              "type": "string"
+            }
+          },
+          "variables": {
+            "readerRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2018-09-01-preview",
+              "name": "[guid(concat(resourceGroup().id, parameters('objectId'), 'Reader'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('readerRoleId')]",
+                "principalId": "[parameters('objectId')]"
               }
             }
           ]
