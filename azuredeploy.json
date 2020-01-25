@@ -84,6 +84,7 @@
     "dnsName": "[variables('prefix')]",
     "identityName": "[concat(variables('prefix'), '-identity')]",
     "labName": "[concat(variables('prefix'), '-lab')]",
+    "logsStorageName": "[concat(variables('prefix'), 'logs')]",
     "privateDataContainerName": "private",
     "privateDataContainerSASProperties": {
       "canonicalizedResource": "[concat('/blob/', variables('privateStorageName'), '/', variables('privateDataContainerName'))]",
@@ -147,7 +148,41 @@
         "dnsSettings": {
           "domainNameLabel": "[variables('dnsName')]"
         }
-      }
+      },
+      "resources": [
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.Network/publicIPAddresses', variables('bastionPublicIPName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          ],
+          "type": "providers/diagnosticSettings",
+          "apiVersion": "2017-05-01-preview",
+          "name": "Microsoft.Insights/bastionPublicIPLogs",
+          "properties": {
+            "logs": [
+              {
+                "category": "DDoSProtectionNotifications",
+                "enabled": true
+              },
+              {
+                "category": "DDoSMitigationFlowLogs",
+                "enabled": true
+              },
+              {
+                "category": "DDoSMitigationReports",
+                "enabled": true
+              }
+            ],
+            "metrics": [
+              {
+                "category": "AllMetrics",
+                "enabled": true
+              }
+            ],
+            "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          }
+        }
+      ]
     },
     {
       "type": "Microsoft.Network/networkSecurityGroups",
@@ -196,7 +231,31 @@
             }
           }
         ]
-      }
+      },
+      "resources": [
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.Network/networkSecurityGroups', variables('vmNsgName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          ],
+          "type": "providers/diagnosticSettings",
+          "apiVersion": "2017-05-01-preview",
+          "name": "Microsoft.Insights/vmNsgLogs",
+          "properties": {
+            "logs": [
+              {
+                "category": "NetworkSecurityGroupEvent",
+                "enabled": true
+              },
+              {
+                "category": "NetworkSecurityGroupRuleCounter",
+                "enabled": true
+              }
+            ],
+            "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          }
+        }
+      ]
     },
     {
       "type": "Microsoft.Network/networkSecurityGroups",
@@ -277,7 +336,31 @@
             }
           }
         ]
-      }
+      },
+      "resources": [
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.Network/networkSecurityGroups', variables('bastionNsgName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          ],
+          "type": "providers/diagnosticSettings",
+          "apiVersion": "2017-05-01-preview",
+          "name": "Microsoft.Insights/bastionNsgLogs",
+          "properties": {
+            "logs": [
+              {
+                "category": "NetworkSecurityGroupEvent",
+                "enabled": true
+              },
+              {
+                "category": "NetworkSecurityGroupRuleCounter",
+                "enabled": true
+              }
+            ],
+            "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          }
+        }
+      ]
     },
     {
       "type": "Microsoft.Network/privateDnsZones",
@@ -369,6 +452,40 @@
               }
             }
           }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2019-06-01",
+      "location": "[resourceGroup().location]",
+      "name": "[variables('logsStorageName')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "properties": {
+        "accessTier": "Hot",
+        "encryption": {
+          "keySource": "Microsoft.Storage",
+          "services": {
+            "blob": {
+              "enabled": true
+            },
+            "file": {
+              "enabled": true
+            }
+          }
+        },
+        "networkAcls": {
+          "bypass": "AzureServices",
+          "defaultAction": "Deny",
+          "virtualNetworkRules": [
+          ]
+        },
+        "isHnsEnabled": false,
+        "supportsHttpsTrafficOnly": true,
+        "resources": [
         ]
       }
     },
@@ -719,6 +836,30 @@
           "properties": {
             "value": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))).primaryEndpoints.blob, '?', listServiceSas(resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName')), '2019-06-01', variables('workingDataContainerSASProperties')).serviceSasToken)]"
           }
+        },
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.KeyVault/vaults', variables('vaultName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          ],
+          "type": "providers/diagnosticSettings",
+          "apiVersion": "2017-05-01-preview",
+          "name": "Microsoft.Insights/kvLogs",
+          "properties": {
+            "logs": [
+              {
+                "category": "AuditEvent",
+                "enabled": true
+              }
+            ],
+            "metrics": [
+              {
+                "category": "AllMetrics",
+                "enabled": true
+              }
+            ],
+            "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          }
         }
       ]
     },
@@ -852,6 +993,24 @@
           "properties": {
             "roleDefinitionId": "[variables('readerRoleId')]",
             "principalId": "[parameters('sandboxGroupObjectId')]"
+          }
+        },
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.Network/bastionHosts', variables('bastionName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          ],
+          "type": "providers/diagnosticSettings",
+          "apiVersion": "2017-05-01-preview",
+          "name": "Microsoft.Insights/bastionLogs",
+          "properties": {
+            "logs": [
+              {
+                "category": "BastionAuditLogs",
+                "enabled": true
+              }
+            ],
+            "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
           }
         }
       ]
