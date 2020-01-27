@@ -17,6 +17,10 @@
       "type": "string",
       "defaultValue": "\"Standard_DS2_v2\", \"Standard_D2as_v4\""
     },
+    "logRetentionDays": {
+      "type": "int",
+      "defaultValue": 30
+    },
     "sasExpiryDate": {
       "type": "string",
       "defaultValue": "2021-01-01T00:00:00Z"
@@ -81,6 +85,7 @@
     "bastionName": "[concat(variables('prefix'), '-bastion')]",
     "bastionNsgName": "[concat(variables('prefix'), '-bastion-nsg')]",
     "bastionPublicIPName": "[concat(variables('prefix'), '-bastion-ip')]",
+    "deploymentACIName": "deployment-aci",
     "dnsName": "[variables('prefix')]",
     "identityName": "[concat(variables('prefix'), '-identity')]",
     "labName": "[concat(variables('prefix'), '-lab')]",
@@ -162,21 +167,37 @@
             "logs": [
               {
                 "category": "DDoSProtectionNotifications",
-                "enabled": true
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
               },
               {
                 "category": "DDoSMitigationFlowLogs",
-                "enabled": true
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
               },
               {
                 "category": "DDoSMitigationReports",
-                "enabled": true
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
               }
             ],
             "metrics": [
               {
                 "category": "AllMetrics",
-                "enabled": true
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
               }
             ],
             "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
@@ -245,11 +266,19 @@
             "logs": [
               {
                 "category": "NetworkSecurityGroupEvent",
-                "enabled": true
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
               },
               {
                 "category": "NetworkSecurityGroupRuleCounter",
-                "enabled": true
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
               }
             ],
             "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
@@ -350,11 +379,19 @@
             "logs": [
               {
                 "category": "NetworkSecurityGroupEvent",
-                "enabled": true
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
               },
               {
                 "category": "NetworkSecurityGroupRuleCounter",
-                "enabled": true
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
               }
             ],
             "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
@@ -556,6 +593,50 @@
         },
         {
           "dependsOn": [
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          ],
+          "type": "providers/diagnosticSettings",
+          "apiVersion": "2017-05-01-preview",
+          "name": "Microsoft.Insights/privateStorageLogs",
+          "properties": {
+            "metrics": [
+              {
+                "category": "AllMetrics",
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
+              }
+            ],
+            "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          }
+        },
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          ],
+          "type": "blobServices/providers/diagnosticSettings",
+          "apiVersion": "2017-05-01-preview",
+          "name": "default/Microsoft.Insights/privateBlobLogs",
+          "properties": {
+            "metrics": [
+              {
+                "category": "AllMetrics",
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
+              }
+            ],
+            "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          }
+        },
+        {
+          "dependsOn": [
             "[resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))]"
           ],
           "type": "blobServices/containers",
@@ -711,6 +792,50 @@
         },
         {
           "dependsOn": [
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          ],
+          "type": "providers/diagnosticSettings",
+          "apiVersion": "2017-05-01-preview",
+          "name": "Microsoft.Insights/transferStorageLogs",
+          "properties": {
+            "metrics": [
+              {
+                "category": "AllMetrics",
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
+              }
+            ],
+            "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          }
+        },
+        {
+          "dependsOn": [
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          ],
+          "type": "blobServices/providers/diagnosticSettings",
+          "apiVersion": "2017-05-01-preview",
+          "name": "default/Microsoft.Insights/transferBlobLogs",
+          "properties": {
+            "metrics": [
+              {
+                "category": "AllMetrics",
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
+              }
+            ],
+            "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
+          }
+        },
+        {
+          "dependsOn": [
             "[resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))]"
           ],
           "type": "blobServices/containers",
@@ -849,13 +974,21 @@
             "logs": [
               {
                 "category": "AuditEvent",
-                "enabled": true
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
               }
             ],
             "metrics": [
               {
                 "category": "AllMetrics",
-                "enabled": true
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
               }
             ],
             "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
@@ -1007,7 +1140,11 @@
             "logs": [
               {
                 "category": "BastionAuditLogs",
-                "enabled": true
+                "enabled": true,
+                "retentionPolicy": {
+                  "enabled": true,
+                  "days": "[parameters('logRetentionDays')]"
+                }
               }
             ],
             "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('logsStorageName'))]"
@@ -1269,6 +1406,61 @@
           }
         }
       ]
+    },
+    {
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName'))]"
+      ],
+      "type": "Microsoft.ContainerInstance/containerGroups",
+      "apiVersion": "2018-10-01",
+      "location": "[resourceGroup().location]",
+      "name": "[variables('deploymentACIName')]",
+      "properties": {
+        "containers": [
+          {
+            "name": "azure-cli",
+            "properties": {
+              "image": "microsoft/azure-cli",
+              "resources": {
+                "requests": {
+                  "cpu": 1,
+                  "memoryInGB": 2
+                }
+              },
+              "command": [
+                "/bin/bash",
+                "-c",
+                "az storage metrics update --account-name $PRIVATE_STORAGE_ACCOUNT --account-key $PRIVATE_STORAGE_KEY --retention $RETENTION --services b --hour true --minute true --api true; az storage metrics update --account-name $TRANSFER_STORAGE_ACCOUNT --account-key $TRANSFER_STORAGE_KEY --retention $RETENTION --services b --hour true --minute true --api true; az storage logging update --account-name $PRIVATE_STORAGE_ACCOUNT --account-key $PRIVATE_STORAGE_KEY --log rwd --retention $RETENTION --services b --version 2; az storage logging update --account-name $TRANSFER_STORAGE_ACCOUNT --account-key $TRANSFER_STORAGE_KEY --log rwd --retention $RETENTION --services b --version 2;"
+              ],
+              "environmentVariables": [
+                {
+                  "name": "RETENTION",
+                  "value": "[parameters('logRetentionDays')]"
+                },
+                {
+                  "name": "PRIVATE_STORAGE_ACCOUNT",
+                  "value": "[variables('privateStorageName')]"
+                },
+                {
+                  "name": "PRIVATE_STORAGE_KEY",
+                  "secureValue": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('privateStorageName')), '2019-06-01').keys[0].value]"
+                },
+                {
+                  "name": "TRANSFER_STORAGE_ACCOUNT",
+                  "value": "[variables('transferStorageName')]"
+                },
+                {
+                  "name": "TRANSFER_STORAGE_KEY",
+                  "secureValue": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('transferStorageName')), '2019-06-01').keys[0].value]"
+                }
+              ]
+            }
+          }
+        ],
+        "osType": "Linux",
+        "restartPolicy": "OnFailure"
+      }
     },
     {
       "dependsOn": [
