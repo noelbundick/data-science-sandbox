@@ -1239,9 +1239,7 @@
           "apiVersion": "2018-10-15-preview",
           "name": "data-science-linux",
           "properties": {
-            "allowClaim": true,
             "osType": "Linux",
-            "storageType": "Premium",
             "formulaContent": {
               "properties": {
                 "size": "[parameters('vmSize')]",
